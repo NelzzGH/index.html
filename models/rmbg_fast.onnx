@@ -1,1 +1,91 @@
+// Path model
+const MODEL_ONNX = "./models/rmbg_fast.onnx";
+const MODEL_CONFIG = "./models/rmbg_fast.json";
 
+let session = null;
+let modelConfig = null;
+
+// Load model ONNX + config JSON
+async function loadRMBG() {
+    console.log("Loading remove background model...");
+
+    session = await ort.InferenceSession.create(MODEL_ONNX, {
+        executionProviders: ["wasm"],   // wajib untuk browser
+    });
+
+    modelConfig = await fetch(MODEL_CONFIG).then(r => r.json());
+
+    console.log("✔ RMBG model loaded!");
+}
+
+// Convert File → ImageData
+function fileToImageData(file) {
+    return new Promise((resolve) => {
+        let img = new Image();
+        img.onload = () => {
+            let canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            let ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            resolve({ img, data: ctx.getImageData(0, 0, img.width, img.height) });
+        };
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+// Core ONNX inference → menghasilkan mask
+async function runRMBG(imageData) {
+    let { width, height, data } = imageData;
+
+    // Convert RGBA → Normalized Float32
+    const floatArr = new Float32Array(width * height * 3);
+    let p = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        floatArr[p++] = data[i] / 255;     // R
+        floatArr[p++] = data[i + 1] / 255; // G
+        floatArr[p++] = data[i + 2] / 255; // B
+    }
+
+    // Buat ONNX tensor input
+    const inputTensor = new ort.Tensor("float32", floatArr, [1, 3, height, width]);
+
+    // Run ONNX inference
+    const output = await session.run({ input: inputTensor });
+
+    // Ambil mask grayscale
+    const mask = output.output.data;
+
+    return mask;
+}
+
+// Gabungkan mask + gambar → hasil transparan
+function applyMaskToImage(original, mask) {
+    let { img, data } = original;
+    let width = img.width;
+    let height = img.height;
+
+    let canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    let ctx = canvas.getContext("2d");
+
+    for (let i = 0; i < mask.length; i++) {
+        let alpha = mask[i] * 255;
+        data.data[i * 4 + 3] = alpha; // set alpha
+    }
+
+    ctx.putImageData(data, 0, 0);
+    return canvas;
+}
+
+// Main function → file input → hasil PNG
+async function removeBackground(file) {
+    if (!session) await loadRMBG();
+
+    const imgData = await fileToImageData(file);
+    const mask = await runRMBG(imgData);
+    const resultCanvas = applyMaskToImage(imgData, mask);
+
+    return new Promise((resolve) => resultCanvas.toBlob(resolve, "image/png"));
+}
