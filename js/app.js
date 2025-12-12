@@ -1,136 +1,46 @@
-// ==============================
-// Konfigurasi
-// ==============================
-const BACKEND_BASE = "https://YOUR-BACKEND-URL"; 
-// contoh: "https://rmbg-backend-production.up.railway.app"
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const result = document.getElementById("result");
 
-// endpoint backend
-const API_PROCESS = `${BACKEND_BASE}/api/remove-bg`;
+// Klik → buka file picker
+dropzone.addEventListener("click", () => fileInput.click());
 
+// Saat file dipilih manual
+fileInput.addEventListener("change", (e) => {
+    handleFile(e.target.files[0]);
+});
 
-// ==============================
-// Element HTML
-// ==============================
-const dropZone = document.getElementById("dropzone");
-const filePicker = document.getElementById("filePicker");
-const processAllBtn = document.getElementById("processAll");
-const fileList = document.getElementById("fileList");
-
-let files = [];
-
-
-// ==============================
-// Drag & Drop
-// ==============================
-dropZone.addEventListener("dragover", (e) => {
+// ===== Drag and Drop =====
+dropzone.addEventListener("dragover", (e) => {
     e.preventDefault();
-    dropZone.classList.add("dragover");
+    dropzone.style.background = "#dcdcdc";
 });
 
-dropZone.addEventListener("dragleave", () => {
-    dropZone.classList.remove("dragover");
+dropzone.addEventListener("dragleave", () => {
+    dropzone.style.background = "#e3e3e3";
 });
 
-dropZone.addEventListener("drop", (e) => {
+dropzone.addEventListener("drop", (e) => {
     e.preventDefault();
-    dropZone.classList.remove("dragover");
-    addFiles(e.dataTransfer.files);
+    dropzone.style.background = "#e3e3e3";
+
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
 });
 
-filePicker.addEventListener("change", (e) => {
-    addFiles(e.target.files);
-});
-
-
-// ==============================
-// Tambah file ke list UI
-// ==============================
-function addFiles(selected) {
-    for (let f of selected) {
-        let id = Date.now() + Math.random();
-
-        files.push({ id, file: f, status: "queued", result: null });
-
-        let item = document.createElement("div");
-        item.className = "file-item";
-        item.id = `file-${id}`;
-
-        item.innerHTML = `
-            <img src="${URL.createObjectURL(f)}" class="thumb">
-            <div class="filename">${f.name}</div>
-            <div class="status" id="status-${id}">Queued</div>
-            <button class="remove" onclick="removeFile(${id})">Hapus</button>
-        `;
-
-        fileList.appendChild(item);
-    }
-}
-
-
-// ==============================
-// Hapus file
-// ==============================
-function removeFile(id) {
-    files = files.filter(f => f.id !== id);
-    let item = document.getElementById(`file-${id}`);
-    if (item) item.remove();
-}
-
-
-// ==============================
-// Proses semua file
-// ==============================
-processAllBtn.addEventListener("click", () => {
-    if (!BACKEND_BASE || BACKEND_BASE.includes("YOUR-BACKEND-URL")) {
-        alert("Isi BACKEND_BASE dulu di app.js dengan URL backend kamu.");
+// ===== Process File =====
+function handleFile(file) {
+    if (!file.type.startsWith("image/")) {
+        alert("Harap pilih file gambar!");
         return;
     }
 
-    for (let f of files) {
-        if (f.status === "queued") processFile(f);
-    }
-});
+    const imgURL = URL.createObjectURL(file);
 
+    result.innerHTML = `
+        <p>Gambar berhasil dimuat:</p>
+        <img src="${imgURL}" style="max-width: 300px; margin-top: 10px; border-radius: 10px;" />
+    `;
 
-// ==============================
-// Kirim file ke backend
-// ==============================
-async function processFile(obj) {
-    const id = obj.id;
-    const statusEl = document.getElementById(`status-${id}`);
-
-    statusEl.innerText = "Processing...";
-    obj.status = "processing";
-
-    try {
-        const form = new FormData();
-        form.append("image", obj.file);
-
-        const res = await fetch(API_PROCESS, {
-            method: "POST",
-            body: form
-        });
-
-        if (!res.ok) throw new Error("Backend error");
-
-        const blob = await res.blob();
-        obj.result = blob;
-
-        statusEl.innerText = "Done";
-
-        let imgURL = URL.createObjectURL(blob);
-
-        const imgTag = document.createElement("img");
-        imgTag.src = imgURL;
-        imgTag.className = "result-img";
-
-        document.getElementById(`file-${id}`).appendChild(imgTag);
-
-        obj.status = "done";
-
-    } catch (err) {
-        statusEl.innerText = "Error";
-        obj.status = "error";
-        console.error(err);
-    }
+    // TODO: tambahkan proses remove background kamu di sini
 }
